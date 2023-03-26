@@ -1,14 +1,9 @@
-import bcrypt, jwt, os, pprint
+import bcrypt, jwt, os
 from flask import Flask, request, redirect, jsonify
 from pymongo import MongoClient, errors
 
-# This is the secret key used to encrypt and decrypt the JWT
-# In a production environment, it should not be hardcoded into the app like this
-# TODO look into docker secrets
-SECRET_KEY = "test secret"  
-
 app = Flask(__name__)
-app.config["SECRET_KEY"] = SECRET_KEY
+app.config["SECRET_KEY"] = os.environ.get('SECRET_KEY')
 
 # Setup DB connection
 client = MongoClient("mongodb://auth-db:27017")
