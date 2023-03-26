@@ -1,6 +1,6 @@
 import bcrypt, jwt, os, pprint
 from flask import Flask, request, redirect, jsonify
-from pymongo import MongoClient
+from pymongo import MongoClient, errors
 
 # This is the secret key used to encrypt and decrypt the JWT
 # In a production environment, it should not be hardcoded into the app like this
@@ -8,7 +8,7 @@ from pymongo import MongoClient
 SECRET_KEY = "test secret"  
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = SECRET_KEY
+app.config["SECRET_KEY"] = SECRET_KEY
 
 # Setup DB connection
 client = MongoClient("mongodb://auth-db:27017")
@@ -16,6 +16,12 @@ auth_db = client.auth_db
 
 # Make emails unique
 auth_db.users.create_index("email", unique=True)
+
+
+# Generate JWT containing user id
+# Converts user id from ObjectId to string
+def generate_jwt(user_id):
+    return jwt.encode({"user_id": str(user_id)}, app.config["SECRET_KEY"], algorithm="HS256")
 
 
 # Create a new user and log them in
@@ -26,26 +32,31 @@ def signup():
     if not data:
         return {
             "message": "Missing JSON data from request body",
-            # "data": None,
-            # "error": "Bad request"
+            "error": "Bad request"
         }, 400
     
     # Get email and password
-    email = data.get("email")
-    password = data.get("password")
+    email = str(data.get("email"))
+    password = str(data.get("password"))
 
     # Attempt to insert user into DB
     # Password is stored as a salted hash
-    result = auth_db.users.insert_one({"email": email, "password": bcrypt.hashpw(password, bcrypt.gensalt())})
-    # if not result.acknowledged:
-
-    pprint(result)
-        
+    result = None
+    try:
+        result = auth_db.users.insert_one({"email": email, "password_hash": bcrypt.hashpw(password.encode("utf8"), bcrypt.gensalt())})
+    
+    # Duplicate email
+    except errors.DuplicateKeyError:
+        return {
+            "message": f"{email} is already registered to an account",
+            "error": "Bad request"
+        }, 400
 
     # User created, generate and return JWT
     return {
-        "data": {"user_id": result.inserted_id},
+        "jwt": generate_jwt(result.inserted_id)
     }, 200
+
 
 # Log user in
 @app.route("/auth/login", methods=["POST"])
@@ -55,13 +66,12 @@ def login():
     if not data:
         return {
             "message": "Missing JSON data from request body",
-            # "data": None,
-            # "error": "Bad request"
+            "error": "Bad request"
         }, 400
     
     # Get email and password
-    email = data.get("email")
-    password = data.get("password")
+    email = str(data.get("email"))
+    password = str(data.get("password"))
     
     # TODO validate inputs
 
@@ -70,22 +80,18 @@ def login():
     if user is None:
         return {
             "message": "User does not exist",
-            # "data": None,
-            # "error": "Unauthorized"
+            "error": "Unauthorized"
         }, 401
      
-    if not bcrypt.checkpw(password, user["password_hash"]):
+    if not bcrypt.checkpw(password.encode("utf8"), user["password_hash"]):
         return {
             "message": "Incorrect password",
-            # "data": None,
-            # "error": "Unauthorized"
+            "error": "Unauthorized"
         }, 401
 
     # Password matched, generate and return JWT
-    print(f"logged in as {user['_id']}")
-
     return {
-        "data": {"user_id": user["_id"]},
+        "jwt": generate_jwt(user["_id"])
     }, 200
 
 # Log user out
@@ -98,10 +104,3 @@ def logout():
 @app.errorhandler(404)
 def page_not_found(e):
     return "The page requested does not exist", 404
-
-# # Main entrypoint
-# if __name__ == "__main__":
-    
-
-#     # Run flask app
-#     app.run(debug=True)
