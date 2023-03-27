@@ -1,7 +1,10 @@
-import bcrypt, jwt, os
+import bcrypt, jwt, os, traceback
 from datetime import datetime, timezone, timedelta
-from flask import Flask, request, redirect, jsonify
+from flask import Flask, request
 from pymongo import MongoClient, errors
+from bson import ObjectId
+
+from auth_middleware import auth_required
 
 ACCESS_TOKEN_EXPIRY_MINUTES = 5
 REFRESH_TOKEN_EXPIRY_MINUTES = (24 * 60)
@@ -20,55 +23,103 @@ auth_db.users.create_index("email", unique=True)
 # Generate access token containing user id
 # Converts user id from ObjectId to string
 # Expires after 5 minutes
-def generate_access_token(user_id):
+def generate_access_token(user_id: ObjectId):
     dt = datetime.now(tz=timezone.utc)
     td = timedelta(minutes=ACCESS_TOKEN_EXPIRY_MINUTES)
 
     return jwt.encode(
-        {"exp": dt + td, "user_id": str(user_id)},
+        {"exp": dt + td, "user_id": str(user_id), "scope": "access"},
         app.config["SECRET_KEY"],
         algorithm="HS256"
     )
+
 
 # Generate refresh token that will be stored in the DB and checked when a new access token is requested
 # Converts user id from ObjectId to string
 # Expires after 24 hours
-def generate_refresh_token(user_id):
+def generate_refresh_token(user_id: ObjectId):
     dt = datetime.now(tz=timezone.utc)
     td = timedelta(minutes=REFRESH_TOKEN_EXPIRY_MINUTES)
 
     return jwt.encode(
-        {"exp": dt + td, "user_id": str(user_id)},
+        {"exp": dt + td, "user_id": str(user_id), "scope": "refresh"},
         app.config["SECRET_KEY"],
         algorithm="HS256"
     )
 
+
 # Generate and return as a response the access and refresh tokens
 # Store the refresh token in the database
-def return_tokens_from_request(user_id):
+def return_tokens_from_request(user_id: ObjectId):
     refresh_token = generate_refresh_token(user_id)
-    auth_db.users.update_one({"_id": user_id}, {"refresh_token": refresh_token})
+    auth_db.users.update_one({"_id": user_id}, {"$set": {"refresh_token": refresh_token}})
     return {
         "access_token": generate_access_token(user_id),
         "refresh_token": refresh_token
     }, 200
 
+
 # Get a new access token given a refresh token
 @app.route("/auth/refresh", methods=["POST"])
-def refresh():
-    # Get json data
-    data = request.json
-    if not data:
-        return {
-            "message": "Missing JSON data from request body",
-            "error": "Bad request"
-        }, 400
-    
-    # Decode refresh token
-    encoded = str(data.get("refresh_token"))
-    decoded = jwt.decode(encoded, "secret", algorithms=["HS256"])
+def refresh():    
+    # Decode refresh token from request header
+    encoded = None
+    decoded = {}
+    user_id = None
+    scope = None
 
+    if "Authorization" in request.headers:
+        encoded = request.headers["Authorization"].split(" ")[1]
+
+    if not encoded:
+        return {
+            "message": "Missing refresh token in Authorization header",
+            "error": "Unauthorized"
+        }, 401 
+
+    try:
+        decoded = jwt.decode(encoded, app.config["SECRET_KEY"], algorithms=["HS256"])
+        user_id = str(decoded["user_id"])
+        scope = str(decoded["scope"])
+
+    except jwt.exceptions.ExpiredSignatureError:
+        return {
+            "message": "Refresh token expired, log in again",
+            "error": "Unauthorized"
+        }, 401
+    
+    except Exception:
+        traceback.print_exc()
+        return {
+            "message": "Error processing refresh token, possibly malformed",
+            "error": "Unauthorized"
+        }, 401
+    
+    # Check this is a refresh token
+    if scope != "refresh":
+        return {
+            "message": "Invalid token scope",
+            "error": "Unauthorized"
+        }, 401
+
+    # Get user associated with token
+    user = auth_db.users.find_one({"_id": ObjectId(user_id)})
+    if user is None:
+        return {
+            "message": "User does not exist",
+            "error": "Unauthorized"
+        }, 401
+    
+    # Check that the token we received is the same as the one stored in the DB
+    if user["refresh_token"] != encoded:
+        return {
+            "message": "Refresh token mismatch",
+            "error": "Unauthorized"
+        }, 401 
+    
+    # Generate new access and refresh tokens
     return return_tokens_from_request(user["_id"])
+
 
 # Create a new user and log them in
 @app.route("/auth/signup", methods=["POST"])
@@ -82,8 +133,20 @@ def signup():
         }, 400
     
     # Get email and password
-    email = str(data.get("email"))
-    password = str(data.get("password"))
+    email = ""
+    password = ""
+    try:
+        email = str(data["email"])
+        password = str(data["password"])
+    
+    except Exception:
+        traceback.print_exc()
+        return {
+            "message": "Error parsing JSON body, possibly malformed",
+            "error": "Bad request"
+        }, 400
+    
+    #TODO validate email and password
 
     # Attempt to insert user into DB
     # Password is stored as a salted hash
@@ -117,10 +180,18 @@ def login():
         }, 400
     
     # Get email and password
-    email = str(data.get("email"))
-    password = str(data.get("password"))
-    
-    # TODO validate inputs
+    email = ""
+    password = ""
+    try:
+        email = str(data["email"])
+        password = str(data["password"])
+
+    except Exception:
+        traceback.print_exc()
+        return {
+            "message": "Error parsing JSON body, possibly malformed",
+            "error": "Bad request"
+        }, 400
 
     # Get password hash from DB and check using bcrypt
     user = auth_db.users.find_one({"email": email})
@@ -139,11 +210,29 @@ def login():
     # Password matched, generate access and refresh tokens
     return return_tokens_from_request(user["_id"])
 
-# Log user out
+
+# Log user out by invalidating their refresh token, meaning they must log in again to get new access tokens
+# The client should discard its access and refresh tokens after calling this
+# The access token will still be valid until it expires, but this is mitigated by the short expiry times
 @app.route("/auth/logout", methods=["POST"])
-def logout():
-    # TODO invalidate JWT? or could logging out just be discarding it client side?
-    return
+@auth_required
+def logout(user_id: str):
+    # Check user exists
+    user = auth_db.users.find_one({"_id": ObjectId(user_id)})
+    if user is None:
+        return {
+            "message": "User does not exist",
+            "error": "Unauthorized"
+        }, 401
+    
+    # Invalidate refresh token by changing it to "revoked"
+    # This will cause future refresh() calls to fail until a new token is generated via login()
+    auth_db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"refresh_token": "revoked"}})
+
+    return {
+        "message": "Successfully logged out"
+    }, 200
+
 
 # Handle 404 error
 @app.errorhandler(404)
