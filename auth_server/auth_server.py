@@ -10,7 +10,7 @@ ACCESS_TOKEN_EXPIRY_MINUTES = 5
 REFRESH_TOKEN_EXPIRY_MINUTES = (24 * 60)
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get('SECRET_KEY')
+app.config["SECRET_KEY"] = open('./jwt-key').read()
 
 # Setup DB connection
 client = MongoClient("mongodb://auth-db:27017")
@@ -30,7 +30,7 @@ def generate_access_token(user_id: ObjectId):
     return jwt.encode(
         {"exp": dt + td, "user_id": str(user_id), "scope": "access"},
         app.config["SECRET_KEY"],
-        algorithm="HS256"
+        algorithm="RS256"
     )
 
 
@@ -44,7 +44,7 @@ def generate_refresh_token(user_id: ObjectId):
     return jwt.encode(
         {"exp": dt + td, "user_id": str(user_id), "scope": "refresh"},
         app.config["SECRET_KEY"],
-        algorithm="HS256"
+        algorithm="RS256"
     )
 
 

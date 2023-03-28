@@ -2,3 +2,4 @@ flask
 pyjwt
 pymongo
 bcrypt
+cryptography

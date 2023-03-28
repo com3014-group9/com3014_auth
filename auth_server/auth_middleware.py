@@ -5,6 +5,7 @@ from flask import request, current_app
 def auth_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        public_key = open('jwt-key.pub').read()
         # Decode token from request header
         encoded = None
         decoded = {}
@@ -20,7 +21,7 @@ def auth_required(f):
             }, 401
         
         try:
-            decoded = jwt.decode(encoded, current_app.config["SECRET_KEY"], algorithms=["HS256"])
+            decoded = jwt.decode(encoded, public_key, algorithms=["RS256"])
             user_id = str(decoded["user_id"])
             scope = str(decoded["scope"])
 
