@@ -3,8 +3,13 @@ version: '3'
 services: 
 
   auth_db:
-    container_name: auth-db
     image: mongo
+
+    hostname: auth-db
+
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=password
 
     volumes:
       - ./data:/data/db
@@ -14,7 +19,9 @@ services:
 
     command: python3 -m flask --app auth_server run --host=0.0.0.0
 
-    env_file: .env
+    environment:
+      - MONGO_USERNAME=root
+      - MONGO_PASSWORD=password
 
     volumes:
       - ./auth_server:/usr/src/app
