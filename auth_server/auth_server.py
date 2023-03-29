@@ -172,7 +172,12 @@ def signup():
             "error": "Bad request"
         }, 400
     
-    #TODO validate email and password
+    # Check email and password are not empty
+    if email == "" or password == "":
+        return {
+            "message": "Email or password was blank",
+            "error": "Bad request"
+        }, 400
 
     # Attempt to insert user into DB
     # Password is stored as a salted hash
