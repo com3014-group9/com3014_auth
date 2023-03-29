@@ -4,20 +4,38 @@ from flask import Flask, request
 from pymongo import MongoClient, errors
 from bson import ObjectId
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
+
 from auth_middleware import auth_required
 
 ACCESS_TOKEN_EXPIRY_MINUTES = 5
 REFRESH_TOKEN_EXPIRY_MINUTES = (24 * 60)
 
-app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get('SECRET_KEY')
+# Load public and private keys
+PUBLIC_KEY = ""
+with open('jwtRS256.key.pub') as f:
+    PUBLIC_KEY = f.read()
+
+# Loading the private key into an RSAPrivateKey object saves CPU time (PyJWT docs)
+PRIVATE_KEY = None
+with open('jwtRS256.key') as f:
+    PRIVATE_KEY = serialization.load_pem_private_key(
+        f.read().encode("utf8"), password=None, backend=default_backend()
+    )
 
 # Setup DB connection
-client = MongoClient("mongodb://auth-db:27017")
+MONGO_USERNAME = os.environ.get("MONGO_USERNAME")
+MONGO_PASSWORD = os.environ.get("MONGO_PASSWORD")
+
+client = MongoClient(f"mongodb://{MONGO_USERNAME}:{MONGO_PASSWORD}@auth-db:27017/?authSource=admin")
 auth_db = client.auth_db
 
 # Make emails unique, db will reject duplicate emails
 auth_db.users.create_index("email", unique=True)
+
+# Flask app
+app = Flask(__name__)
 
 
 # Generate access token containing user id
@@ -29,8 +47,8 @@ def generate_access_token(user_id: ObjectId):
 
     return jwt.encode(
         {"exp": dt + td, "user_id": str(user_id), "scope": "access"},
-        app.config["SECRET_KEY"],
-        algorithm="HS256"
+        PRIVATE_KEY,
+        algorithm="RS256"
     )
 
 
@@ -43,8 +61,8 @@ def generate_refresh_token(user_id: ObjectId):
 
     return jwt.encode(
         {"exp": dt + td, "user_id": str(user_id), "scope": "refresh"},
-        app.config["SECRET_KEY"],
-        algorithm="HS256"
+        PRIVATE_KEY,
+        algorithm="RS256"
     )
 
 
@@ -56,6 +74,14 @@ def return_tokens_from_request(user_id: ObjectId):
     return {
         "access_token": generate_access_token(user_id),
         "refresh_token": refresh_token
+    }, 200
+
+
+# Get the public key used to decrypt JWT tokens
+@app.route("/auth/get-public-key", methods=["POST"])
+def get_public_key():
+    return {
+        "public_key": PUBLIC_KEY
     }, 200
 
 
@@ -78,7 +104,7 @@ def refresh():
         }, 401 
 
     try:
-        decoded = jwt.decode(encoded, app.config["SECRET_KEY"], algorithms=["HS256"])
+        decoded = jwt.decode(encoded, PUBLIC_KEY, algorithms=["RS256"])
         user_id = str(decoded["user_id"])
         scope = str(decoded["scope"])
 
