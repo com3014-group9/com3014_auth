@@ -221,8 +221,8 @@ def signup():
     except errors.DuplicateKeyError:
         return {
             "message": f"{email} is already registered to an account",
-            "error": "Bad request"
-        }, 400
+            "error": "Conflict"
+        }, 409
 
     # User created, generate access and refresh tokens
     return return_tokens_from_request(result.inserted_id)
