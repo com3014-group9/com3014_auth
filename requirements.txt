@@ -3,3 +3,5 @@ pyjwt
 pymongo
 bcrypt
 cryptography
+pytest
+mongomock

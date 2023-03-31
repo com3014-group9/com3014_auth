@@ -42,9 +42,9 @@ def auth_required(f):
                 "error": "Unauthorized"
             }, 401
         
-        if not user_id:
+        if user_id == "":
             return {
-                "message": "user_id was None",
+                "message": "user_id was blank",
                 "error": "Unauthorized"
             }, 401
         
