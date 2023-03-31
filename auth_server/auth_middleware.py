@@ -1,6 +1,11 @@
 import jwt, traceback
 from functools import wraps
-from flask import request, current_app
+from flask import request
+
+# Load public key on import so we don't make a file access for each request
+PUBLIC_KEY = ""
+with open('jwtRS256.key.pub') as f:
+    PUBLIC_KEY = f.read()
 
 def auth_required(f):
     @wraps(f)
@@ -20,7 +25,7 @@ def auth_required(f):
             }, 401
         
         try:
-            decoded = jwt.decode(encoded, current_app.config["SECRET_KEY"], algorithms=["HS256"])
+            decoded = jwt.decode(encoded, PUBLIC_KEY, algorithms=["RS256"])
             user_id = str(decoded["user_id"])
             scope = str(decoded["scope"])
 
@@ -37,9 +42,9 @@ def auth_required(f):
                 "error": "Unauthorized"
             }, 401
         
-        if not user_id:
+        if user_id == "":
             return {
-                "message": "user_id was None",
+                "message": "user_id was blank",
                 "error": "Unauthorized"
             }, 401
         
