@@ -1,7 +1,13 @@
 import jwt
 
+from conftest import generate_access_token_expiry, generate_refresh_token_expiry
+
 # Test signing up a new user
 def test_signup(client, public_key):
+    # Genrate token expiry times
+    access_token_expiry = generate_access_token_expiry()
+    refresh_token_expiry = generate_refresh_token_expiry()
+
     # Test the reponse format
     response = client.post("/auth/signup", json={"email": "test@test.com", "password": "test"})
     assert response.status_code == 200
@@ -15,12 +21,18 @@ def test_signup(client, public_key):
     assert len(access_user_id) == 24
     assert access_scope == "access"
 
+    # Test that expiry is between expiry generated before request and after request 
+    assert access_token_expiry <= decoded_access["exp"] <= generate_access_token_expiry()
+
     # Test we can decode the refresh token
     decoded_refresh = jwt.decode(response.json["refresh_token"], public_key, algorithms=["RS256"])
     refresh_user_id = str(decoded_refresh["user_id"])
     refresh_scope = str(decoded_refresh["scope"])
     assert len(refresh_user_id) == 24
     assert refresh_scope == "refresh"
+
+    # Test that expiry is between expiry generated before request and after request 
+    assert refresh_token_expiry <= decoded_refresh["exp"] <= generate_refresh_token_expiry()
 
 # Test that signup fails if email is already in use
 def test_signup_duplicate_email(client):

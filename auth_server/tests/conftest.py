@@ -1,3 +1,4 @@
+from datetime import datetime, timezone, timedelta
 import pytest, mongomock
 from unittest.mock import patch
 
@@ -16,3 +17,15 @@ def client(app):
 def public_key():
     with open('jwtRS256.key.pub') as f:
         return f.read()
+
+def generate_access_token_expiry():
+    dt = datetime.now(tz=timezone.utc)
+    td = timedelta(minutes=auth_server.ACCESS_TOKEN_EXPIRY_MINUTES)
+
+    return int((dt + td).timestamp())
+
+def generate_refresh_token_expiry():
+    dt = datetime.now(tz=timezone.utc)
+    td = timedelta(minutes=auth_server.REFRESH_TOKEN_EXPIRY_MINUTES)
+
+    return int((dt + td).timestamp())

@@ -1,7 +1,13 @@
 import jwt
 
+from conftest import generate_access_token_expiry, generate_refresh_token_expiry
+
 # Test signing up a new user and logging in as them
 def test_signup_and_login(client, public_key):
+    # Genrate token expiry times
+    access_token_expiry = generate_access_token_expiry()
+    refresh_token_expiry = generate_refresh_token_expiry()
+
     # Sign up the user
     response = client.post("/auth/signup", json={"email": "test@test.com", "password": "test"})
     signup_access = response.json["access_token"]
@@ -39,4 +45,8 @@ def test_signup_and_login(client, public_key):
 
     assert login_access_scope == signup_access_scope
     assert login_refresh_scope == signup_refresh_scope
+
+    # Check expiry times of tokens provided by login
+    assert access_token_expiry <= decoded_login_access["exp"] <= generate_access_token_expiry()
+    assert refresh_token_expiry <= decoded_login_refresh["exp"] <= generate_refresh_token_expiry()
 
