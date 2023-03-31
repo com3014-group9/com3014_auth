@@ -10,12 +10,15 @@ This service handles the following functions:
 - Validation of refresh tokens against the database
 
 ## Usage
-Ensuring that `docker` and `docker compose` are configured on your system, run `docker compose up` from within the root of the repository. If you get an error, you may need to use `sudo docker compose up`
+Ensuring that `docker` and `docker compose` are configured on your system, run `docker compose build` and then `docker compose up` from within the root of the repository. If you get a permission error, you may need to add `sudo` in front of these commands.
 
 Once the service is running, it can be accessed at `localhost:5000`
 
+## Testing
+Tests are located in `./auth_server/tests`. They are provided by `pytest`, using `mongomock` to create a mock testing database. To run the tests, use `docker compose build` and then `docker compose run auth_server python3 -m pytest` from within the root of the repository. If you get a permission error, you may need to add `sudo` in front of these commands.
+
 ## Token format
-Both access and refresh tokens are JWT tokens signed using the secret key in `.env`. Once decoded, they have the following format:
+Both access and refresh tokens are JWT tokens signed using the private key in `./auth_server/jwtRS256.key`. They can be decoded using the public key in `./auth_server/jwtRS256.key.pub`, which can be requested from the service using the `POST /auth/get-public-key` endpoint. Once decoded, they have the following format:
 
 ```
 {
@@ -95,5 +98,15 @@ On success, the following response will be received:
 {
     "access_token": "<access_token>",
     "refresh_token": "<refresh_token>"
+}
+```
+
+### POST /auth/get-public-key
+Request a copy of the public key needed to decode the access and refresh tokens.
+
+The following response will be received:
+```
+{
+    "public_key": "<public key>"
 }
 ```
