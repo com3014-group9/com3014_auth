@@ -1,0 +1,22 @@
+image: docker:latest
+
+stages:
+    - build
+    - test
+
+build_service:
+    stage: build
+    script: docker compose build
+
+run_unit_tests:
+    stage: test
+    script: docker compose run auth_server python3 -m pytest
+
+make_test_request:
+    stage: test
+    script:
+        - apk update
+        - apk add curl
+        - docker compose up -d
+        - curl -X POST localhost:5000/auth/get-public-key
+        - docker compose down
