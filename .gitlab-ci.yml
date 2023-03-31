@@ -18,5 +18,6 @@ make_test_request:
         - apk update
         - apk add curl
         - docker compose up -d
+        - sleep 10
         - curl -X POST localhost:5000/auth/get-public-key
         - docker compose down
