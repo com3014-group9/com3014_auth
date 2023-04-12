@@ -1,6 +1,7 @@
 import bcrypt, jwt, os, traceback
 from datetime import datetime, timezone, timedelta
 from flask import Flask, Blueprint, request, g, current_app
+from flask_cors import CORS
 from pymongo import MongoClient, errors
 from bson import ObjectId
 
@@ -23,6 +24,7 @@ auth = Blueprint('auth', __name__, url_prefix='/auth')
 # Setup Flask application
 def create_app():
     app = Flask(__name__)
+    CORS(app)
     app.register_blueprint(auth)
 
     # Disconnect from db on app context teardown
