@@ -1,4 +1,3 @@
-
 name: CI Pipeline
 
 on:
@@ -34,6 +33,14 @@ jobs:
         sleep 5
         curl -X POST localhost:5000/auth/get-public-key
         docker compose down
+
+    - name: Trigger Main Workflow
+      if: github.ref == 'refs/heads/main'
+      uses: peter-evans/repository-dispatch@v2
+      with:
+        repository: com3014-group9/com3014_meowstagram
+        token: ${{ secrets.PAT }}
+        event-type: trigger-build
     
 
   
