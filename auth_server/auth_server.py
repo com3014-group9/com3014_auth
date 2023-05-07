@@ -100,11 +100,12 @@ def generate_refresh_token(user_id: ObjectId):
 # Generate and return as a response the access and refresh tokens
 # Store the refresh token in the database
 def return_tokens_from_request(user_id: ObjectId):
+    access_token = generate_access_token(user_id)
     refresh_token = generate_refresh_token(user_id)
     get_db().users.update_one({"_id": user_id}, {"$set": {"refresh_token": refresh_token}})
     return {
-        "access_token": generate_access_token(user_id),
-        "refresh_token": refresh_token
+        "access_token": access_token,
+        "refresh_token": refresh_token,
     }, 200
 
 
@@ -227,7 +228,9 @@ def signup():
         }, 409
 
     # User created, generate access and refresh tokens
-    return return_tokens_from_request(result.inserted_id)
+    tokens_response = return_tokens_from_request(result.inserted_id)
+    tokens_response[0]["user_id"] = str(result.inserted_id)
+    return tokens_response
 
 
 # Log user in
@@ -270,8 +273,10 @@ def login():
         }, 401
 
     # Password matched, generate access and refresh tokens
-    return return_tokens_from_request(user["_id"])
-
+    # return return_tokens_from_request(user["_id"])
+    tokens_response = return_tokens_from_request(user["_id"])
+    tokens_response[0]["user_id"] = str(user["_id"])
+    return tokens_response
 
 # Log user out by invalidating their refresh token, meaning they must log in again to get new access tokens
 # The client should discard its access and refresh tokens after calling this
@@ -294,7 +299,7 @@ def logout(user_id: str):
     return {
         "message": "Successfully logged out"
     }, 200
-
+     
 
 # Handle 404 error
 @auth.errorhandler(404)
