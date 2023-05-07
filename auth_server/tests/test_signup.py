@@ -45,7 +45,7 @@ def test_signup_duplicate_email(client):
 # Test failure if no json body
 def test_signup_no_json(client):
     response = client.post("/auth/signup")
-    assert response.status_code == 400
+    assert response.status_code == 415
 
 
 # Test failure if email is blank
