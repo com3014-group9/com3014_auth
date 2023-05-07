@@ -58,7 +58,7 @@ def test_signup_and_login(client, public_key):
 # Test failure if no json body
 def test_login_no_json(client):
     response = client.post("/auth/login")
-    assert response.status_code == 400
+    assert response.status_code == 415
 
 
 # Test failure if user does not exist
